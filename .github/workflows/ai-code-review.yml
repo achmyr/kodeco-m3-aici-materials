@@ -1,4 +1,57 @@
-name: ai-code-review.yml
+name: AI Code Review
 on:
-
+  pull_request:
+    types: [opened, synchronize]
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Run Copilot review
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_OTEL_ENABLED: true
+          COPILOT_OTEL_EXPORTER_TYPE: file
+        run: |
+          ./scripts/ai-code-review.sh --ci "${{ github.base_ref }}" \
+            --review-file review.md \
+            --otel-file "${{ runner.temp }}/copilot-otel.jsonl"
+      - name: Upload token log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: copilot-token-log
+          path: ${{ runner.temp }}/copilot-otel.jsonl
+          if-no-files-found: ignore
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('review.md', 'utf8');
+            if (body.length > 200) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

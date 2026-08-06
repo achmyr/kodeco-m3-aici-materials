@@ -1,2 +1,10 @@
-/TokensDashboard/build/*
+/TokensDashboard/build/
 .idea/*
+.build/
+
+# ai-code-review-local.sh output
+/copilot-otel.jsonl
+/review.local.md
+/review.md
+/scripts/ai-code-review-local.sh
+/Package.swift
