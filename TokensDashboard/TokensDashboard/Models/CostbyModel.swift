@@ -10,6 +10,8 @@ struct ModelCost: Identifiable {
   let tokens: Double
   /// Month-over-month change as a fraction (+0.18 == up 18%).
   let change: Double
+  /// Number of API requests billed against this model month to date.
+  let requests: Int
   var id: String { name }
 }
 
@@ -20,15 +22,22 @@ struct ModelCost: Identifiable {
 ///
 struct ModelCostStore {
   let modelCosts: [ModelCost] = [
-    ModelCost(name: "Claude Opus 4.8", cost: 85_700, tokens: 9.8e9,  change: 0.18),
-    ModelCost(name: "Claude Sonnet 4.6", cost: 63_200, tokens: 12.4e9, change: 0.06),
-    ModelCost(name: "Claude Haiku 4.5", cost: 28_600, tokens: 7.2e9,  change: -0.04),
-    ModelCost(name: "GPT-5 Codex", cost: 18_400, tokens: 2.3e9,  change: 0.02),
-    ModelCost(name: "Gemini 3 Pro", cost: 8_200,  tokens: 1.0e9,  change: -0.11),
+    ModelCost(name: "Claude Opus 4.8", cost: 85_700, tokens: 9.8e9,  change: 0.18, requests: 412_000),
+    ModelCost(name: "Claude Sonnet 4.6", cost: 63_200, tokens: 12.4e9, change: 0.06, requests: 1_205_000),
+    ModelCost(name: "Claude Haiku 4.5", cost: 28_600, tokens: 7.2e9,  change: -0.04, requests: 2_840_000),
+    ModelCost(name: "GPT-5 Codex", cost: 18_400, tokens: 2.3e9,  change: 0.02, requests: 96_000),
+    ModelCost(name: "Gemini 3 Pro", cost: 8_200,  tokens: 1.0e9,  change: -0.11, requests: 51_000),
   ]
   
   var monthToDateSpend: Double { modelCosts.reduce(0) { $0 + $1.cost } }
   var monthToDateTokens: Double { modelCosts.reduce(0) { $0 + $1.tokens } }
+
+  /// Looks up a model by name for the "requests" drill-down column.
+  /// - Note: force-unwraps the match; callers must only pass names known
+  ///   to exist in `modelCosts`.
+  func model(named name: String) -> ModelCost {
+    modelCosts.first(where: { $0.name == name })!
+  }
 }
 
 
