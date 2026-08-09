@@ -17,6 +17,6 @@ jobs:
         shell: bash
         run: |
           cd TokensDashboard
-          xcodebuild -project TokensDashboard.xcodeproj -scheme TokensDashboard -destination 'platform=iOS Simulator,name=iPhone 14' test
+          xcodebuild -project TokensDashboard.xcodeproj -scheme TokensDashboard -destination 'platform=iOS Simulator,name=iPhone 17' test
 
 
