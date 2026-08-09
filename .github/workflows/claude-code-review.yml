@@ -38,7 +38,9 @@ jobs:
 
             Inspect the changes with git (e.g. `git diff origin/${{ github.base_ref }}...HEAD`).
             Your final response must be the full review in markdown — it is posted as a PR comment.
+          show_full_output: true
           claude_args: |
+            --model claude-sonnet-5
             --max-turns 8
             --allowedTools "Read,Glob,Grep,Bash(git *)"
       - name: Print token usage
