@@ -106,9 +106,16 @@ echo
 {
   echo "# AI Code Review"
   echo
-  echo "Focus: Swift concurrency, memory management, SwiftUI state, project conventions."
+  echo "Focus: correctness/safety, Swift concurrency, retain cycles, SwiftUI state, project conventions (see CODE_REVIEW.md)."
   echo
 } > "$REVIEW_FILE"
+
+# Shared criteria with Claude/Codex (CODE_REVIEW.md via build-review-prompt.sh).
+BUILD_PROMPT="$(dirname "$0")/build-review-prompt.sh"
+if [[ ! -x "$BUILD_PROMPT" ]]; then
+  echo "error: missing $BUILD_PROMPT" >&2
+  exit 1
+fi
 
 # --- Run the review ----------------------------------------------------------
 export COPILOT_OTEL_ENABLED=true
@@ -117,7 +124,8 @@ export COPILOT_OTEL_FILE_EXPORTER_PATH="$OTEL_FILE"
 
 for file in $FILES; do
   echo "## $file" >> "$REVIEW_FILE"
-  copilot -p "Review @$file for correctness, concurrency safety, retain cycles, and adherence to the project CODE_REVIEW.md. List only concrete issues with file:line references. Skip pure style nits." \
+  PROMPT=$("$BUILD_PROMPT" copilot "$file")
+  copilot -p "$PROMPT" \
     --allow-tool='shell(git:*)' --no-ask-user --silent >> "$REVIEW_FILE" 2>/dev/null || true
   echo >> "$REVIEW_FILE"
 done

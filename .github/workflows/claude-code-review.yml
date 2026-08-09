@@ -10,7 +10,6 @@ permissions:
   pull-requests: write
   id-token: write
 jobs:
-  if:false
   claude-review:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -19,6 +18,17 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Build review prompt
+        id: prompt
+        run: |
+          {
+            echo 'text<<PROMPT_EOF'
+            ./scripts/build-review-prompt.sh claude \
+              "${{ github.base_ref }}" \
+              "${{ github.repository }}" \
+              "${{ github.event.pull_request.number }}"
+            echo 'PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
       - name: Run Claude Code review
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -28,21 +38,7 @@ jobs:
           # GitHub App (OIDC app-token exchange). Comments are posted below
           # via github-script with the same token.
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-            BASE: ${{ github.base_ref }}
-
-            Goal: produce a concise PR review as your final message (posted as a PR comment).
-
-            1. Run once: `git diff origin/${{ github.base_ref }}...HEAD`
-            2. Read CODE_REVIEW.md only if needed for priorities.
-            3. Open individual files only when the diff is insufficient to judge an issue.
-            4. Prioritise: correctness, concurrency safety, retain cycles, SwiftUI state ownership.
-            5. List only concrete issues with file:line references. Skip pure style nits.
-            6. If there are no high-severity issues, say so briefly and stop.
-
-            Do not explore the whole repo. Finish with the full markdown review — no extra tool calls after that.
+          prompt: ${{ steps.prompt.outputs.text }}
           claude_args: |
             --model claude-sonnet-5
             --max-turns 20
@@ -63,22 +59,7 @@ jobs:
           fi
       - name: Post review comment
         if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            if (!fs.existsSync('claude-review.md')) {
-              core.info('claude-review.md missing – skipping comment');
-              return;
-            }
-            const body = fs.readFileSync('claude-review.md', 'utf8').trim();
-            if (body && body.length > 100) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: '## Claude Code Review\n\n' + body
-              });
-            } else {
-              core.info('Review text too short – skipping comment');
-            }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/post-review-comment.sh claude-review.md "Claude Code Review"

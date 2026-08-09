@@ -43,16 +43,10 @@ jobs:
           if-no-files-found: ignore
 
       - name: Post review comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('review.md', 'utf8');
-            if (body.length > 200) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Copilot review.md already includes the "# AI Code Review" title.
+          MIN_BODY_LENGTH: "200"
+        run: ./scripts/post-review-comment.sh review.md
