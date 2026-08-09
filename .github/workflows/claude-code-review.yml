@@ -32,16 +32,19 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
             BASE: ${{ github.base_ref }}
 
-            Review the pull-request diff for correctness, concurrency safety, retain cycles,
-            and adherence to the project CODE_REVIEW.md. List only concrete issues with
-            file:line references. Skip pure style nits.
+            Goal: produce a concise PR review as your final message (posted as a PR comment).
 
-            Inspect the changes with git (e.g. `git diff origin/${{ github.base_ref }}...HEAD`).
-            Your final response must be the full review in markdown — it is posted as a PR comment.
-          show_full_output: true
+            1. Run once: `git diff origin/${{ github.base_ref }}...HEAD`
+            2. Read CODE_REVIEW.md only if needed for priorities.
+            3. Open individual files only when the diff is insufficient to judge an issue.
+            4. Prioritise: correctness, concurrency safety, retain cycles, SwiftUI state ownership.
+            5. List only concrete issues with file:line references. Skip pure style nits.
+            6. If there are no high-severity issues, say so briefly and stop.
+
+            Do not explore the whole repo. Finish with the full markdown review — no extra tool calls after that.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 8
+            --max-turns 20
             --allowedTools "Read,Glob,Grep,Bash(git *)"
       - name: Print token usage
         if: always() && steps.claude.outputs.execution_file != ''
