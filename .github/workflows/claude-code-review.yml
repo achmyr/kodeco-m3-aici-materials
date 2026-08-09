@@ -10,7 +10,8 @@ permissions:
   pull-requests: write
   id-token: write
 jobs:
-  review:
+  if:false
+  claude-review:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
