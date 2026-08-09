@@ -1,0 +1,50 @@
+name: Codex Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run Codex review
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          # Pin home so the token-usage step can find session rollouts reliably.
+          codex-home: ${{ runner.temp }}/codex-home
+          prompt: |
+            Review this iOS pull request. Prioritise correctness, concurrency safety,
+            retain cycles, SwiftUI state ownership and adherence to CODE_REVIEW.md.
+            Report only high-severity concrete issues with file:line references.
+            Skip pure formatting and low-priority style comments.
+          output-file: codex-review.md
+      - name: Print token usage
+        if: always()
+        run: ./scripts/codex-token-usage.sh "${{ runner.temp }}/codex-home"
+      - name: Post review comment
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('codex-review.md', 'utf8');
+            if (body && body.length > 100) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: '## Codex Review\n\n' + body
+              });
+            }

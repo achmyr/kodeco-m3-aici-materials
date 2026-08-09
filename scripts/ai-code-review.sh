@@ -127,28 +127,13 @@ cat "$REVIEW_FILE"
 echo "=================================================================="
 
 # --- Token summary from the OTel file exporter ------------------------------
-echo
-echo "Token usage summary (from $OTEL_FILE):"
+# Shared console + GitHub Step Summary layout (same as Claude/Codex scripts).
+# shellcheck source=token-usage-summary.sh
+source "$(dirname "$0")/token-usage-summary.sh"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "  (jq not found - skipping token summary)" >&2
 else
-  # Format an integer with thousands separators, portably (no numfmt/locale dependency).
-  format_number() {
-    awk -v n="$1" 'BEGIN {
-      n = int(n)
-      s = sprintf("%d", n)
-      out = ""
-      len = length(s)
-      for (i = 1; i <= len; i++) {
-        out = out substr(s, i, 1)
-        remaining = len - i
-        if (remaining > 0 && remaining % 3 == 0) out = out ","
-      }
-      print out
-    }'
-  }
-
   TOTALS_JSONL=""
   CALLS=0
   if [ -s "$OTEL_FILE" ]; then
@@ -167,39 +152,6 @@ else
     ' "$OTEL_FILE" | awk '{sum += $1} END {print sum + 0}')
   fi
 
-  if [ -z "$TOTALS_JSONL" ]; then
-    echo "  (no gen_ai.client.token.usage metrics recorded)"
-  else
-    TOTAL=0
-    while IFS= read -r entry; do
-      TOKEN_TYPE=$(echo "$entry" | jq -r '.key')
-      VALUE=$(echo "$entry" | jq -r '.value')
-      TOTAL=$(awk -v a="$TOTAL" -v b="$VALUE" 'BEGIN { print a + b }')
-      printf '  %8s: %s tokens\n' "$TOKEN_TYPE" "$(format_number "$VALUE")"
-    done <<< "$TOTALS_JSONL"
-    printf '  %8s: %s\n' "calls" "$CALLS"
-    printf '  %8s: %s tokens\n' "total" "$(format_number "$TOTAL")"
-  fi
-
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    {
-      echo "## AI Code Review – Token Usage"
-      echo
-      if [ -z "$TOTALS_JSONL" ]; then
-        echo '_No `gen_ai.client.token.usage` metrics recorded._'
-      else
-        echo "| Token type | Count |"
-        echo "| --- | ---: |"
-        while IFS= read -r entry; do
-          TOKEN_TYPE=$(echo "$entry" | jq -r '.key')
-          VALUE=$(echo "$entry" | jq -r '.value')
-          echo "| $TOKEN_TYPE | $(format_number "$VALUE") |"
-        done <<< "$TOTALS_JSONL"
-        echo "| **total** | **$(format_number "$TOTAL")** |"
-        echo
-        echo "Calls: $CALLS"
-      fi
-    } >> "$GITHUB_STEP_SUMMARY"
-  fi
+  print_token_usage_summary "$TOTALS_JSONL" "$CALLS" "$OTEL_FILE"
 fi
 

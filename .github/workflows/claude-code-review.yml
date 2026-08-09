@@ -1,0 +1,74 @@
+name: Claude Code Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run Claude Code review
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE: ${{ github.base_ref }}
+
+            Review the pull-request diff for correctness, concurrency safety, retain cycles,
+            and adherence to the project CODE_REVIEW.md. List only concrete issues with
+            file:line references. Skip pure style nits.
+
+            Inspect the changes with git (e.g. `git diff origin/${{ github.base_ref }}...HEAD`).
+            Your final response must be the full review in markdown — it is posted as a PR comment.
+          claude_args: |
+            --max-turns 8
+            --allowedTools "Read,Glob,Grep,Bash(git *)"
+      - name: Print token usage
+        if: always() && steps.claude.outputs.execution_file != ''
+        run: ./scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
+      - name: Extract review text
+        if: success() && steps.claude.outputs.execution_file != ''
+        run: |
+          jq -r '
+            [.[] | select(.type == "result" and .subtype == "success")]
+            | last
+            | .result // empty
+          ' "${{ steps.claude.outputs.execution_file }}" > claude-review.md
+          if [ ! -s claude-review.md ]; then
+            echo "No review text found in Claude execution result." >&2
+          fi
+      - name: Post review comment
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('claude-review.md')) {
+              core.info('claude-review.md missing – skipping comment');
+              return;
+            }
+            const body = fs.readFileSync('claude-review.md', 'utf8').trim();
+            if (body && body.length > 100) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: '## Claude Code Review\n\n' + body
+              });
+            } else {
+              core.info('Review text too short – skipping comment');
+            }
