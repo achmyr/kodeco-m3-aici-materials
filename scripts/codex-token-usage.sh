@@ -4,11 +4,16 @@
 # Used by .github/workflows/codex-review.yml after openai/codex-action.
 # Codex does not expose token counts as Action outputs. Instead it writes
 # session rollouts under $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl.
-# Each completed turn emits a line like:
-#   {"type":"turn.completed","usage":{"input_tokens":…,"cached_input_tokens":…,
-#    "output_tokens":…,"reasoning_output_tokens":…}}
-# turn.completed.usage is cumulative for the session, so we take the *last*
-# turn.completed event (not a sum of all turns).
+#
+# Session rollouts typically look like:
+#   {"type":"event_msg","payload":{"type":"token_count","info":{
+#     "total_token_usage":{"input_tokens":…,"cached_input_tokens":…,
+#       "output_tokens":…,"reasoning_output_tokens":…,"total_tokens":…},
+#     "last_token_usage":{…}}}}
+# `total_token_usage` is cumulative for the session — take the *last* event.
+#
+# `codex exec --json` streams a flatter shape:
+#   {"type":"turn.completed","usage":{"input_tokens":…,…}}
 #
 # Console + GitHub Step Summary match scripts/ai-code-review.sh via
 # scripts/token-usage-summary.sh.
@@ -67,27 +72,63 @@ resolve_rollout() {
   printf '%s\n' "$newest"
 }
 
+# Flatten any known Codex usage shape into {input_tokens, cached_input_tokens, …}.
+# Returns empty if the object is not a usable TokenUsage payload.
+normalize_usage_jq='
+  def as_usage:
+    if type != "object" then empty
+    elif (.input_tokens // .inputTokens // .output_tokens // .outputTokens // .total_tokens // .totalTokens) != null then
+      {
+        input_tokens: (.input_tokens // .inputTokens // 0),
+        cached_input_tokens: (.cached_input_tokens // .cachedInputTokens // 0),
+        output_tokens: (.output_tokens // .outputTokens // 0),
+        reasoning_output_tokens: (.reasoning_output_tokens // .reasoningOutputTokens // 0),
+        total_tokens: (.total_tokens // .totalTokens // 0)
+      }
+    elif .total_token_usage != null then (.total_token_usage | as_usage)
+    elif .last_token_usage != null then (.last_token_usage | as_usage)
+    else empty
+    end;
+
+  if .type == "event_msg" and .payload.type == "token_count" then
+    (.payload.info | as_usage)
+  elif .type == "token_count" then
+    ((.info // .) | as_usage)
+  elif .type == "turn.completed" and .usage != null then
+    (.usage | as_usage)
+  elif .usage != null then
+    (.usage | as_usage)
+  else empty
+  end
+'
+
 TARGET="${1:-}"
 if ! ROLLOUT=$(resolve_rollout "$TARGET"); then
   print_token_usage_summary "" 0 "${TARGET:-CODEX_HOME}"
   exit 0
 fi
 
-# Last turn.completed carries cumulative session usage.
-USAGE=$(jq -c 'select(.type == "turn.completed" and .usage != null) | .usage' "$ROLLOUT" | tail -n 1 || true)
-CALLS=$(jq -c 'select(.type == "turn.completed")' "$ROLLOUT" | wc -l | tr -d ' ')
+# Last matching event carries the best cumulative session totals.
+USAGE=$(jq -c "$normalize_usage_jq" "$ROLLOUT" 2>/dev/null | tail -n 1 || true)
 
-if [[ -z "$USAGE" ]]; then
-  # Fallback: some builds embed usage on token_count / event payloads.
-  USAGE=$(jq -c '
+# Prefer completed turns; fall back to token_count events (one per model call).
+CALLS=$(jq -c '
+  select(
+    .type == "turn.completed"
+    or .type == "task_complete"
+    or .type == "turn_complete"
+    or (.type == "event_msg" and (.payload.type == "task_complete" or .payload.type == "turn_complete"))
+  )
+' "$ROLLOUT" 2>/dev/null | wc -l | tr -d ' ' || true)
+if [[ "${CALLS:-0}" -eq 0 ]]; then
+  CALLS=$(jq -c '
     select(
-      (.type == "token_count" and .info != null)
-      or (.type == "event_msg" and .payload.type == "token_count")
-      or (.usage != null and (.type | tostring | test("token|usage|completed")))
+      (.type == "event_msg" and .payload.type == "token_count")
+      or .type == "token_count"
     )
-    | (.usage // .info // .payload.info // .payload.usage // empty)
-  ' "$ROLLOUT" | tail -n 1 || true)
+  ' "$ROLLOUT" 2>/dev/null | wc -l | tr -d ' ' || true)
 fi
+CALLS="${CALLS:-0}"
 
 if [[ -z "$USAGE" ]]; then
   print_token_usage_summary "" "$CALLS" "$ROLLOUT"
@@ -96,16 +137,22 @@ fi
 
 # Map Codex usage fields into the same Token type | Count table as Copilot.
 # Keys mirror gen_ai.token.type style short labels (sorted for stable order).
+# Emit breakdown rows plus an optional explicit total (Codex total_tokens is
+# authoritative; input already includes cached so summing would double-count).
 TOTALS_JSONL=$(echo "$USAGE" | jq -c '
-  [
-    {key: "input",     value: (.input_tokens // .inputTokens // 0)},
-    {key: "cached",    value: (.cached_input_tokens // .cachedInputTokens // 0)},
-    {key: "output",    value: (.output_tokens // .outputTokens // 0)},
-    {key: "reasoning", value: (.reasoning_output_tokens // .reasoningOutputTokens // 0)}
-  ]
-  | map(select(.value != 0))
-  | sort_by(.key)
-  | .[]
+  . as $u
+  | (
+      [
+        {key: "input",     value: ($u.input_tokens // 0)},
+        {key: "cached",    value: ($u.cached_input_tokens // 0)},
+        {key: "output",    value: ($u.output_tokens // 0)},
+        {key: "reasoning", value: ($u.reasoning_output_tokens // 0)}
+      ]
+      | map(select(.value != 0))
+      | sort_by(.key)
+      | .[]
+    ),
+    (if ($u.total_tokens // 0) != 0 then {key: "total", value: $u.total_tokens} else empty end)
 ')
 
 print_token_usage_summary "$TOTALS_JSONL" "$CALLS" "$ROLLOUT"

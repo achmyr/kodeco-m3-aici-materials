@@ -56,14 +56,23 @@ print_token_usage_summary() {
   fi
 
   local total=0
+  local explicit_total=""
   local token_type value
   while IFS= read -r entry; do
     [[ -z "$entry" ]] && continue
     token_type=$(echo "$entry" | jq -r '.key')
     value=$(echo "$entry" | jq -r '.value')
+    # Optional explicit total (e.g. Codex total_tokens). Not summed into parts.
+    if [[ "$token_type" == "total" ]]; then
+      explicit_total="$value"
+      continue
+    fi
     total=$(awk -v a="$total" -v b="$value" 'BEGIN { print a + b }')
     printf '  %8s: %s tokens\n' "$token_type" "$(format_number "$value")"
   done <<< "$totals_jsonl"
+  if [[ -n "$explicit_total" ]]; then
+    total="$explicit_total"
+  fi
   printf '  %8s: %s\n' "calls" "$calls"
   printf '  %8s: %s tokens\n' "total" "$(format_number "$total")"
 
@@ -77,6 +86,7 @@ print_token_usage_summary() {
         [[ -z "$entry" ]] && continue
         token_type=$(echo "$entry" | jq -r '.key')
         value=$(echo "$entry" | jq -r '.value')
+        [[ "$token_type" == "total" ]] && continue
         echo "| $token_type | $(format_number "$value") |"
       done <<< "$totals_jsonl"
       echo "| **total** | **$(format_number "$total")** |"
