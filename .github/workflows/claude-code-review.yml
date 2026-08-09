@@ -23,7 +23,7 @@ jobs:
         run: |
           {
             echo 'text<<PROMPT_EOF'
-            ./scripts/build-review-prompt.sh claude \
+            ./.github/scripts/build-review-prompt.sh claude \
               "${{ github.base_ref }}" \
               "${{ github.repository }}" \
               "${{ github.event.pull_request.number }}"
@@ -36,7 +36,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Use the workflow GITHUB_TOKEN so we do not require the Claude Code
           # GitHub App (OIDC app-token exchange). Comments are posted below
-          # via github-script with the same token.
+          # with the same token.
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: ${{ steps.prompt.outputs.text }}
           claude_args: |
@@ -45,7 +45,7 @@ jobs:
             --allowedTools "Read,Glob,Grep,Bash(git *)"
       - name: Print token usage
         if: always() && steps.claude.outputs.execution_file != ''
-        run: ./scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
+        run: ./.github/scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
       - name: Extract review text
         if: success() && steps.claude.outputs.execution_file != ''
         run: |
@@ -62,4 +62,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./scripts/post-review-comment.sh claude-review.md "Claude Code Review"
+        run: ./.github/scripts/post-review-comment.sh claude-review.md "Claude Code Review"

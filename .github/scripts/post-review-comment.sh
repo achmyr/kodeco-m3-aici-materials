@@ -1,19 +1,10 @@
 #!/usr/bin/env bash
 # Post an AI review markdown file as a GitHub pull-request comment.
 #
-# Used by:
-#   .github/workflows/claude-code-review.yml
-#   .github/workflows/codex-review.yml
-#   .github/workflows/ai-code-review.yml
+# Used by AI review workflows under .github/workflows/.
 #
 # Usage:
-#   ./scripts/post-review-comment.sh <review-file> [heading]
-#
-# Examples:
-#   ./scripts/post-review-comment.sh claude-review.md "Claude Code Review"
-#   ./scripts/post-review-comment.sh codex-review.md "Codex Review"
-#   ./scripts/post-review-comment.sh review.md
-#     # no heading — file already starts with "# AI Code Review"
+#   .github/scripts/post-review-comment.sh <review-file> [heading]
 #
 # Environment:
 #   GH_TOKEN or GITHUB_TOKEN   required (Actions provides GITHUB_TOKEN)
@@ -45,7 +36,6 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-# Prefer GH_TOKEN (gh default); fall back to Actions GITHUB_TOKEN.
 export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 if [[ -z "$GH_TOKEN" ]]; then
   echo "error: GH_TOKEN or GITHUB_TOKEN must be set" >&2
@@ -84,7 +74,6 @@ if [[ -z "$BODY" ]]; then
 fi
 
 if [[ -n "$HEADING" ]]; then
-  # Avoid double-heading if the file already starts with the same title.
   first_line=$(printf '%s\n' "$BODY" | head -n 1)
   if [[ "$first_line" != "## $HEADING" && "$first_line" != "# $HEADING" ]]; then
     BODY="## ${HEADING}"$'\n\n'"${BODY}"
@@ -97,7 +86,6 @@ if (( body_len < MIN_BODY_LENGTH )); then
   exit 0
 fi
 
-# Write body to a temp file so we don't hit shell arg limits on long reviews.
 TMP_BODY=$(mktemp)
 trap 'rm -f "$TMP_BODY"' EXIT
 printf '%s\n' "$BODY" > "$TMP_BODY"

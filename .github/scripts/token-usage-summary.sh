@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Shared token-usage summary printer for AI review scripts.
 #
-# Emits the same console layout and GitHub Step Summary markdown used by
-# scripts/ai-code-review.sh so Copilot / Claude / Codex jobs look identical.
+# Emits the same console layout and GitHub Step Summary markdown used by all
+# Copilot / Claude / Codex review jobs.
 #
 # Source this file, then call:
 #   print_token_usage_summary <totals_jsonl> <calls> [source_label]
@@ -13,10 +13,7 @@
 # keys are token-type labels (sorted by the caller if order matters).
 # calls: integer number of model calls / turns.
 # source_label: optional text for the console "Token usage summary (from …)" line.
-#
-# Requires: jq (only if totals_jsonl is non-empty — caller may check first).
 
-# Format an integer with thousands separators, portably (no numfmt/locale dependency).
 format_number() {
   awk -v n="$1" 'BEGIN {
     n = int(n)
@@ -32,7 +29,6 @@ format_number() {
   }'
 }
 
-# Print console + optional $GITHUB_STEP_SUMMARY in the canonical format.
 print_token_usage_summary() {
   local totals_jsonl="${1:-}"
   local calls="${2:-0}"
@@ -62,7 +58,6 @@ print_token_usage_summary() {
     [[ -z "$entry" ]] && continue
     token_type=$(echo "$entry" | jq -r '.key')
     value=$(echo "$entry" | jq -r '.value')
-    # Optional explicit total (e.g. Codex total_tokens). Not summed into parts.
     if [[ "$token_type" == "total" ]]; then
       explicit_total="$value"
       continue

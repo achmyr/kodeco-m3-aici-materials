@@ -1,7 +1,7 @@
 name: AI Code Review
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 concurrency:
   group: ai-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -11,7 +11,7 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -30,7 +30,7 @@ jobs:
           COPILOT_OTEL_ENABLED: true
           COPILOT_OTEL_EXPORTER_TYPE: file
         run: |
-          ./scripts/ai-code-review.sh --ci "${{ github.base_ref }}" \
+          ./.github/scripts/ai-code-review.sh "${{ github.base_ref }}" \
             --review-file review.md \
             --otel-file "${{ runner.temp }}/copilot-otel.jsonl"
       - name: Upload token log
@@ -40,12 +40,9 @@ jobs:
           name: copilot-token-log
           path: ${{ runner.temp }}/copilot-otel.jsonl
           if-no-files-found: ignore
-
       - name: Post review comment
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          # Copilot review.md already includes the "# AI Code Review" title.
-          MIN_BODY_LENGTH: "200"
-        run: ./scripts/post-review-comment.sh review.md
+        run: ./.github/scripts/post-review-comment.sh review.md "AI Code Review"

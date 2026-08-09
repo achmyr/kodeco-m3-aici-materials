@@ -1,20 +1,10 @@
 #!/usr/bin/env bash
-# Print token / cost usage from a Claude Code Action execution log.
+# Print token / cost usage from a Claude Code Action execution log (CI only).
 #
 # Used by .github/workflows/claude-code-review.yml after anthropics/claude-code-action.
-# The action writes a JSON array of SDK messages to execution_file (typically
-# $RUNNER_TEMP/claude-execution-output.json). The final message of type
-# "result" carries total_cost_usd and modelUsage (per-model token counts).
-#
-# Console + GitHub Step Summary match scripts/ai-code-review.sh via
-# scripts/token-usage-summary.sh.
 #
 # Usage:
-#   ./scripts/claude-token-usage.sh <execution-file>
-#
-# Exit codes:
-#   0  summary printed (or soft no-op when file missing / no result message)
-#   1  bad usage or missing jq / unreadable file
+#   .github/scripts/claude-token-usage.sh <execution-file>
 set -euo pipefail
 
 if [[ $# -lt 1 || -z "${1:-}" ]]; then
@@ -37,7 +27,6 @@ fi
 # shellcheck source=token-usage-summary.sh
 source "$(dirname "$0")/token-usage-summary.sh"
 
-# Prefer the final result message (has total_cost_usd + modelUsage).
 RESULT=$(jq -c '[.[] | select(.type == "result")] | last // empty' "$EXEC")
 if [[ -z "$RESULT" ]]; then
   print_token_usage_summary "" 0 "$EXEC"
@@ -46,8 +35,6 @@ fi
 
 CALLS=$(echo "$RESULT" | jq -r '.num_turns // 0')
 
-# Aggregate modelUsage across models into the same token-type keys the Copilot
-# OTel path uses (input / output / …). Fall back to top-level usage if needed.
 TOTALS_JSONL=$(echo "$RESULT" | jq -c '
   def tokens:
     (.modelUsage // .model_usage // {}) as $m

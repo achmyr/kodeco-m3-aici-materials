@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build review prompt
-        run: ./scripts/build-review-prompt.sh codex "${{ github.base_ref }}" > review-prompt.txt
+        run: ./.github/scripts/build-review-prompt.sh codex "${{ github.base_ref }}" > review-prompt.txt
       - name: Run Codex review
         id: codex
         uses: openai/codex-action@v1
@@ -30,10 +30,10 @@ jobs:
           output-file: codex-review.md
       - name: Print token usage
         if: always()
-        run: ./scripts/codex-token-usage.sh "${{ runner.temp }}/codex-home"
+        run: ./.github/scripts/codex-token-usage.sh "${{ runner.temp }}/codex-home"
       - name: Post review comment
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./scripts/post-review-comment.sh codex-review.md "Codex Review"
+        run: ./.github/scripts/post-review-comment.sh codex-review.md "Codex Review"
