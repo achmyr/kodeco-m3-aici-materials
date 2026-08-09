@@ -57,7 +57,6 @@ jobs:
             ${{ github.event.pull_request.body }}
 
   codex-review:
-    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
