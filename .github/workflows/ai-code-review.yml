@@ -1,6 +1,5 @@
 name: AI Code Review
 on:
-  workflow_dispatch:
   pull_request:
     types: [opened, synchronize]
 concurrency:
@@ -11,6 +10,7 @@ permissions:
   pull-requests: write
 jobs:
   review:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

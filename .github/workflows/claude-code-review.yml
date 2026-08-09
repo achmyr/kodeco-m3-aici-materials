@@ -23,6 +23,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Use the workflow GITHUB_TOKEN so we do not require the Claude Code
+          # GitHub App (OIDC app-token exchange). Comments are posted below
+          # via github-script with the same token.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
