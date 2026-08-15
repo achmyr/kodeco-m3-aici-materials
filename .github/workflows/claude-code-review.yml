@@ -2,44 +2,58 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - '**/*.swift'
+      - '**/*.{m,h,mm}'
+      - '**/*.xcodeproj/**'
+      - '**/*.xcworkspace/**'
+      - 'CODE_REVIEW.md'
+      - '.github/workflows/claude-code-review.yml'
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
-permissions:
-  contents: read
-  pull-requests: write
-  id-token: write
 jobs:
-  review:
+  claude-review:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Build review prompt
+        id: prompt
+        run: |
+          {
+            echo 'text<<PROMPT_EOF'
+            ./.github/scripts/build-review-prompt.sh claude \
+              "${{ github.base_ref }}" \
+              "${{ github.repository }}" \
+              "${{ github.event.pull_request.number }}"
+            echo 'PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
       - name: Run Claude Code review
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-            BASE: ${{ github.base_ref }}
-
-            Review the pull-request diff for correctness, concurrency safety, retain cycles,
-            and adherence to the project CODE_REVIEW.md. List only concrete issues with
-            file:line references. Skip pure style nits.
-
-            Inspect the changes with git (e.g. `git diff origin/${{ github.base_ref }}...HEAD`).
-            Your final response must be the full review in markdown — it is posted as a PR comment.
+          # Use the workflow GITHUB_TOKEN so we do not require the Claude Code
+          # GitHub App (OIDC app-token exchange). Comments are posted below
+          # with the same token.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.text }}
           claude_args: |
-            --max-turns 8
+            --model claude-sonnet-5
+            --max-turns 20
             --allowedTools "Read,Glob,Grep,Bash(git *)"
       - name: Print token usage
         if: always() && steps.claude.outputs.execution_file != ''
-        run: ./scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
+        run: ./.github/scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
       - name: Extract review text
         if: success() && steps.claude.outputs.execution_file != ''
         run: |
@@ -53,22 +67,7 @@ jobs:
           fi
       - name: Post review comment
         if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            if (!fs.existsSync('claude-review.md')) {
-              core.info('claude-review.md missing – skipping comment');
-              return;
-            }
-            const body = fs.readFileSync('claude-review.md', 'utf8').trim();
-            if (body && body.length > 100) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: '## Claude Code Review\n\n' + body
-              });
-            } else {
-              core.info('Review text too short – skipping comment');
-            }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./.github/scripts/post-review-comment.sh claude-review.md "Claude Code Review"
