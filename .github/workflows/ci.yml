@@ -1,22 +1,45 @@
 name: Token Dashboard CI
 on:
-  workflow_dispatch: ~
+  workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
-jobs:
-  build-and-test:
-    name: Build and Test
-    runs-on: macos-latest
+# Build and test run on every pull request, including documentation-only
+# and draft changes. Review jobs live in sibling workflows, share path
+# filters and a draft exemption, and stay advisory.
 
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-      - name: Run xcodebuild
-        shell: bash
+      - name: Build
         run: |
           cd TokensDashboard
-          xcodebuild -project TokensDashboard.xcodeproj -scheme TokensDashboard -destination 'platform=iOS Simulator,name=iPhone 17' test
+          xcodebuild -project TokensDashboard.xcodeproj \
+            -scheme TokensDashboard \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            build
 
-
+  test:
+    name: Test
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Test
+        run: |
+          cd TokensDashboard
+          xcodebuild -project TokensDashboard.xcodeproj \
+            -scheme TokensDashboard \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            test

@@ -7,7 +7,6 @@ import Charts
 // MARK: - Detail screen · cost by model
 
 struct CostbyModelView: View {
-  private let costByModelViewModel = CostByModelViewModel()
   @State private var costByModelViewModel = CostByModelViewModel()
 
   var body: some View {
