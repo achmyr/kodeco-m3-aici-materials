@@ -8,6 +8,7 @@ import Charts
 
 struct CostbyModelView: View {
   private let costByModelViewModel = CostByModelViewModel()
+  @State private var costByModelViewModel = CostByModelViewModel()
 
   var body: some View {
     ScrollView {
@@ -23,6 +24,9 @@ struct CostbyModelView: View {
     .background(Color(.systemBackground))
     .navigationTitle("Cost by Model")
     .toolbarTitleDisplayMode(.inline)
+    .onAppear {
+      costByModelViewModel.startAutoRefresh()
+    }
   }
 
   private var donut: some View {
@@ -77,6 +81,10 @@ private struct SliceRow: View {
           .foregroundStyle(.secondary)
       }
       Spacer()
+      Text(slice.requestsDisplay)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Spacer()
       Text(slice.costDisplay)
         .font(.system(.body, design: .serif, weight: .semibold))
     }
@@ -90,3 +98,4 @@ private struct SliceRow: View {
     CostbyModelView()
   }
 }
+
