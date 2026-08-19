@@ -1,10 +1,28 @@
 name: Codex Review
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**/*.swift'
+      - '**/*.{m,h,mm}'
+      - '**/*.xcodeproj/**'
+      - '**/*.xcworkspace/**'
+      - 'CODE_REVIEW.md'
+      - 'CI_GUIDANCE.md'
+      - '.github/scripts/**'
+      - '.github/workflows/codex-review.yml'
+
 env:
   CI_GUIDANCE: CI_GUIDANCE.md
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   codex-review:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
