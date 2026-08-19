@@ -1,0 +1,44 @@
+name: AI Code Review
+on:
+  pull_request:
+env:
+  CI_GUIDANCE: CI_GUIDANCE.md
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Run Copilot review
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_OTEL_ENABLED: true
+          COPILOT_OTEL_EXPORTER_TYPE: file
+        run: |
+          ./.github/scripts/ai-code-review.sh "${{ github.base_ref }}" \
+            --review-file review.md \
+            --otel-file "${{ runner.temp }}/copilot-otel.jsonl" \
+            --guidance "${{ env.CI_GUIDANCE }}"
+      - name: Upload token log
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: copilot-token-log
+          path: ${{ runner.temp }}/copilot-otel.jsonl
+          if-no-files-found: ignore
+      - name: Post review comment
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./.github/scripts/post-review-comment.sh review.md "AI Code Review"
