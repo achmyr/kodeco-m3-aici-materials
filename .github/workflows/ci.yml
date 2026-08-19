@@ -22,7 +22,7 @@ jobs:
           cd TokensDashboard
           xcodebuild -project TokensDashboard.xcodeproj \
             -scheme TokensDashboard \
-            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -destination 'generic/platform=iOS Simulator' \
             build
 
   test:
