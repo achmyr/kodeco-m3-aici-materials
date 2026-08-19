@@ -1,0 +1,60 @@
+name: Claude Code Review
+on:
+  pull_request:
+env:
+  CI_GUIDANCE: CI_GUIDANCE.md
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Build review prompt
+        id: prompt
+        run: |
+          {
+            echo 'text<<PROMPT_EOF'
+            ./.github/scripts/build-review-prompt.sh claude \
+              "${{ github.base_ref }}" \
+              "${{ github.repository }}" \
+              "${{ github.event.pull_request.number }}" \
+              --guidance "${{ env.CI_GUIDANCE }}"
+            echo 'PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Run Claude Code review
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Use the workflow GITHUB_TOKEN so we do not require the Claude Code
+          # GitHub App (OIDC app-token exchange). Comments are posted below
+          # with the same token.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.text }}
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 20
+            --allowedTools "Read,Glob,Grep,Bash(git *)"
+      - name: Print token usage
+        if: always() && steps.claude.outputs.execution_file != ''
+        run: ./.github/scripts/claude-token-usage.sh "${{ steps.claude.outputs.execution_file }}"
+      - name: Extract review text
+        if: success() && steps.claude.outputs.execution_file != ''
+        run: |
+          jq -r '
+            [.[] | select(.type == "result" and .subtype == "success")]
+            | last
+            | .result // empty
+          ' "${{ steps.claude.outputs.execution_file }}" > claude-review.md
+          if [ ! -s claude-review.md ]; then
+            echo "No review text found in Claude execution result." >&2
+          fi
+      - name: Post review comment
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./.github/scripts/post-review-comment.sh claude-review.md "Claude Code Review"
